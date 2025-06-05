@@ -1,0 +1,277 @@
+#Rebecca Busby
+#06/04/2025
+#Data Analysis Competence Test
+
+#Load library
+library(rio)
+#Import data table from GitHub
+annual_data<-import("https://github.com/lormarchand/PhD_vacancy_2025/raw/refs/heads/main/file_task_PhDVacancyUAntwerp_May2025.xlsx")
+
+########
+#Question 1 – see sheet ANNUAL PRODUCTION
+  # The file contained a list of sites comprising forest (F) and other biomes (G, grasslands etc). Select the
+  # forests. Transform each ANPP value as logarithmic value (logANPP). Make a Kruskal-Wallis test to
+  # verify if logANPP is different between managed forests (management category: M) and not-managed
+  # forests (management category: N). Is there a significant difference?
+########
+
+#subset data table with only forested biomes
+forest_data<-subset(annual_data, annual_data$BIOME_TYPE=="F")
+
+#Load library
+library(dplyr) 
+
+#Data check/exploration
+str(forest_data) #check data structure
+forest_data<-forest_data %>% filter(!is.na(ANPP)) #remove NAs
+forest_data$ANPP<-as.numeric(forest_data$ANPP) #Change ANPP column to numeric
+hist(forest_data$ANPP) # quick plot of ANPP data to check for non-normality (expected)
+
+#Create new column with logarithmic values for ANPP
+forest_data$logANPP<-log(forest_data$ANPP)
+hist(forest_data$logANPP) #quick plot of log-transformed ANPP data
+
+#Kruskal-Wallis test for forest management strategies
+kruskal.test(logANPP ~ MANAGEMENT, data = forest_data) #kruskal test for log-transformed ANPP
+
+#Technically for a Kruskal-Wallis test, you wouldn't need to log transform the data before running the test. This is because
+  # this test is non-parametric and doesn't need to meet the same normality assumptions of ANOVAS or other parametric
+  # tests.
+kruskal.test(ANPP ~ MANAGEMENT, data = forest_data) #showing the same result for ANPP that is not log-transformed
+
+############
+# ANSWER (Question 1)
+  # Based on the Kruskal-Wallis test, which resulted in a p-value of 0.05107 (greater than the most commonly 
+  # accepted significance level of 0.05), we cannot reject the null hypothesis. This means that there is not 
+  # sufficient statistical evidence to conclude that the two groups (managed and not-managed forests) are 
+  # significantly different from each other based on the available data. 
+  # In other words, the p-value of 0.05107 indicates that if there were truly no difference between the 
+  # managed and not-managed forests, we would observe data as extreme as, or more extreme than, our current 
+  # results approximately ~5.11% of the time due to random chance alone.
+
+#############
+# Question 2 - see sheet ANNUAL PRODUCTION
+  # Show the European forest sites on a map of Europe, making a visual difference between natural and
+  # managed sites.
+#############
+
+#load libraries
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+#re-subset forested plots to include all data
+forest_data<-subset(annual_data, annual_data$BIOME_TYPE=="F") 
+
+#create a basemap of Europe using rnaturalearth
+basemap <- ne_countries(scale = "medium", continent = "Europe", returnclass = "sf")
+
+#create research site points from Annual Production data table (WGS 84 geographic coordinate system)
+site_locations <- st_as_sf(forest_data, coords = c("LONGITUDE", "LATITUDE"), crs = 4326) 
+
+#Create map of research sites with different symbology for management strategy using ggplot
+european_sites_map <- ggplot() +
+  geom_sf(data = basemap, fill = "darkgrey", color = "lightgrey", linewidth = 0.3) + #basemap
+  geom_sf(data = site_locations, aes(color = MANAGEMENT, shape = MANAGEMENT), size = 4, stroke = 1) + #site locations
+  scale_color_manual(values = c("M" = "darkgreen", "N" = "darkred"), 
+                     labels = c("Managed", "Non-managed")) + #legend changes
+  scale_shape_manual(values = c("M" = 16, "N" = 17), 
+                     labels = c("Managed", "Non-managed")) + #legend changes
+  coord_sf(xlim = c(-15, 40), ylim = c(35, 70), expand = FALSE) + # map extent
+  labs(title = "Forested Research Sites in Europe", # map labels
+       subtitle = "Grouped by Management Type",
+       color = "Management Type", 
+       shape = "Management Type") +
+  theme_minimal() + #aesthetic changes
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 18),
+        plot.subtitle = element_text(hjust = 0.5, size = 14, color = "darkgrey"),
+        axis.title = element_blank(), 
+        axis.text = element_text(size = 9), 
+        panel.grid.major = element_line(color = "white", linewidth = 0.2), 
+        panel.background = element_rect(fill = "aliceblue", color = NA), 
+        legend.position = "right", 
+        legend.title = element_text(face = "bold", size = 11),
+        legend.text = element_text(size = 10))
+
+print(european_sites_map) #show map
+
+############
+# Question 3 - see sheet BUDBURST
+  # Buds need to ‘accumulate heat’ to develop and open in spring. We can think that every sufficiently
+  # warm day in late winter – early spring contribute to this heat accumulation which is called ‘growingdegree-days’
+  # (GDD). Cold days (days with an average temperature below a certain minimal threshold,T, in °C) do not contribute. 
+  # The daily heat contribution is calculated as the daily temperature minus
+  # the minimal threshold temperature T, while GDD is calculated as the daily heat contribution summed
+  # up for the period from January 1st until the day of budburst. In the BUDBURST sheet, you find daily
+  # average temperatures (DOY1 = Jan 1st, DOY366 = Dec 31st) from one site (BEL.11) in two years (2018, 2019).
+  # You know that the temperature threshold T is 5°C and tree budburst date at the site in 2018 was on
+  # the April 16. What was the GDD required for budburst in 2018? Based on this, what date for budburst
+  # would you expect in 2019 for a tree knowing that GDD is constant between years?
+  # Create a graph that shows the GDD in both years from January 1st onwards.
+############
+
+#load library
+library(tidyr)
+library(stringr)
+library(lubridate)
+
+#Load data from GitHub
+bud_data <- import("https://github.com/lormarchand/PhD_vacancy_2025/raw/refs/heads/main/file_task_PhDVacancyUAntwerp_May2025.xlsx", which = 2)
+
+#Data cleaning/checking
+str(bud_data)#Check data structure
+bud_data <- bud_data %>%
+  mutate(across(Year:DOY366, ~ as.numeric(.))) #Convert DOY to numeric
+
+#Transpose data table
+bud_data_long <- bud_data %>%
+  pivot_longer(cols = -c(SID,Year),     
+    names_to = "DOY", 
+    values_to = "Avg_daily_temp") 
+
+bud_data_long <- bud_data_long %>%
+  mutate(DOY = str_remove(DOY, "DOY")) # Remove "DOY" from rows in "DOY" column
+
+bud_data_long$DOY<-as.numeric(bud_data_long$DOY) #make DOY numeric
+any(is.na(bud_data_long)) #Check for NAs
+
+#Create new column "heat_contribution" with GDD calculated and apply "0" to any temperatures that do not 
+  # exceed the minimum temperature requirement of 5°C (therefore not contributing to growing degree days)
+bud_data_heat <- bud_data_long %>%
+  mutate(heat_contribution = pmax(0, Avg_daily_temp - 5))
+
+#Create another column "Total_Heat_Contribution" which calculates cumulative GDD
+bud_data_heat <- bud_data_heat %>%
+arrange(SID, Year, DOY) %>%
+  group_by(Year) %>%
+  mutate(Total_Heat_Contribution = cumsum(heat_contribution)) %>%
+  ungroup()
+
+#Julian date for April 16th (2018 bud burst) is 106. Use this to identify GDD value for this date and find 
+  # GDD threshold
+bud_data_heat %>%
+  filter(Year == 2018, DOY == 106) %>%
+  pull(Total_Heat_Contribution)
+
+##############
+#Answer (Question 3, Part 1)
+  #The GDD value for bud burst from 2018 was 204.76.
+###############
+
+#Because the cumulative GDD value from 2018 was 204.76, and this value is the same for bud burst every year, 
+  # then we can pull this GDD value from 2019 to determine the bud burst date for that year.
+bud_data_heat %>%
+  filter(Year == 2019) %>%
+  arrange(DOY) %>%
+  filter(Total_Heat_Contribution >= 204.76) %>%
+  slice(1) %>%
+  pull(DOY) 
+
+###############
+#Answer (Question1 3, Part 2)
+  #The Julian date when the GDD threshold was met for bud burst in 2019 was 88 or March 29th.
+###############
+
+#To create an informative plot, we can create a data frame which allows us to convert the time scale to 
+  # an easier to read month format instead of Julian date.
+month_doy_labels <- data.frame(
+  month_num = 1:12,
+  month_name = month(1:12, label = TRUE, abbr = FALSE)) %>%
+  mutate(dummy_date = as.Date(paste0("2023-", month_num, "-01")), 
+         start_doy = yday(dummy_date))
+
+#Create x-axis labeling objects
+x_axis_breaks <- month_doy_labels$start_doy #align the months in the correct locations on based on Julian Date
+x_axis_labels <- month_doy_labels$month_name #apply month text to label instead of a number
+
+#Subset the data to show January through May only (data relevant to bud burst timing)
+bud_data_gdd<-subset(bud_data_heat, bud_data_heat$DOY<=121) 
+
+#I thought it would also be interesting to visualize the days that had zero heat contribution.
+
+#Create a new column that identifies whether the day was a growing day or non-growing day (separate out year
+  # for clarity in legend).
+bud_data_gdd <- bud_data_gdd %>%
+  mutate(point_fill_category = case_when(
+    Total_Heat_Contribution == 0 ~ "Non-Growing Day",
+    Total_Heat_Contribution != 0 & Year == 2018 ~ "Growing Day - 2018",
+    Total_Heat_Contribution != 0 & Year == 2019 ~ "Growing Day - 2019"),
+    point_fill_category = factor(point_fill_category,
+                                 levels = c("Non-growing Day", "Growing Day - 2018", "Growing Day - 2019")))
+
+#Plot growing degree days by year, including different symbology for growing and non-growing days. This plot 
+  # will also indicate the bud burst for 2018 and 2019 as well as the GDD threshold for bud burst.
+gdd_plot <- ggplot(bud_data_gdd, aes(x = DOY, y = Total_Heat_Contribution, color = as.factor(Year))) +
+  geom_line(linewidth = .5,show.legend = FALSE) + #connect points across years
+  
+  geom_point(aes(fill = point_fill_category), size = 2, shape = 21, stroke = 0.5, #fill points based on GDD status
+             show.legend = c(fill = TRUE, color = FALSE)) +
+  scale_fill_manual(                                                            
+    values = c(
+      "Non-Growing Day" = "white",
+      "Growing Day - 2018" = "#B22222",
+      "Growing Day - 2019" = "#0072B2"),
+    breaks = c("Non-Growing Day", "Growing Day - 2018", "Growing Day - 2019"),
+    labels = c("Non-growing Day", "Growing Day (2018)", "Growing Day (2019)")) +
+  geom_hline(yintercept = 205, linetype = "solid", color = "black", linewidth = 0.5) + # Add the horizontal line for GDD threshold
+  annotate("text",
+           x = 50,
+           y = 205,
+           label = "GDD Threshhold",
+           color = "black",
+           vjust = -1.1, hjust = 1,
+           size = 4, fontface = "bold") +
+  geom_vline(xintercept = 106, linetype = "dashed", color = "#B22222", linewidth = 0.8) +   # Add the vertical line for 2018 Bud Burst 
+  annotate("text", x = 106, y = 480,
+           label = "2018 Bud Burst",
+           color = "#B22222",
+           vjust = -1, hjust = 1,
+           size = 4, angle = 90, fontface = "bold") +
+  geom_vline(xintercept = 88, linetype = "dashed", color = "#0072B2", linewidth = 0.8) +   # Add the vertical line for 2019 Bud Burst
+  annotate("text",x = 88,y = 480, 
+           label = "2019 Bud Burst",
+           color = "#0072B2",
+           vjust = -1, hjust = 1,
+           size = 4, angle = 90, fontface = "bold") +
+  labs(
+    title = "Growing Degree Days and Bud Burst Timing",
+    subtitle = "Comparing Daily Heat Accumulation Across Years",
+    y = "Cumulative GDDs (Threshold 5°C)",
+    x = "Month",
+    color = "Year",
+    fill = "GDD Status and Year") +
+   scale_x_continuous(                                                          #Changing labels on x-axis
+     breaks = x_axis_breaks[x_axis_breaks <= 121],
+     labels = x_axis_labels[x_axis_breaks <= 121],
+     expand = expansion(mult = c(0.01, 0.05))) +
+  scale_y_continuous(                                                           #Modifying y-axis labels
+    breaks = c(0, 100, 200, 300, 400, 500),
+    expand = expansion(mult = c(0, 0.05))) +
+  theme(                                                                        #Aesthetic changes to plot
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+    plot.subtitle = element_text(hjust = 0.5, size = 12, color = "gray30"),
+    axis.title = element_text(size = 13, face = "bold"),
+    axis.text = element_text(size = 11, color = "gray40"),
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+    panel.grid.major.x = element_line(linetype = "dotted", color = "gray70", linewidth = 0.3),
+    panel.grid.minor.x = element_line(linetype = "dotted", color = "gray90", linewidth = 0.1),
+    panel.grid.major.y = element_line(linetype = "dotted", color = "gray70", linewidth = 0.3),
+    panel.grid.minor.y = element_blank(),
+    axis.line = element_line(color = "gray30", linewidth = 0.5),
+    axis.line.x = element_line(color = "gray30", linewidth = 0.5),
+    axis.line.y = element_line(color = "gray30", linewidth = 0.5),
+    axis.ticks.x = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length.x = unit(0.1, "cm"),
+    axis.ticks.y = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length.y = unit(0.1, "cm"),
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 11),
+    legend.spacing.y = unit(0.5, "cm"),
+    plot.margin = margin(t = 10, r = 10, b = 10, l = 10),
+    panel.background = element_rect(fill = "white", colour = NA)
+  ) 
+
+# Display the plot
+print(gdd_plot)
+
